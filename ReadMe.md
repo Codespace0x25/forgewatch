@@ -35,7 +35,6 @@ make install
 Optional but recommended:
 
 * `clang` or `gcc` to compile
-* `nasm` if you’re using assembly
 
 ---
 
@@ -82,7 +81,7 @@ Now every time you save a file or add/remove something in `src/`, your build scr
 
 * Works with **any language or project**
 * Blazingly fast
-* Lightweight: written in pure C (with optional NASM)
+* Lightweight: written in pure C
 * Keeps your development loop tight and reactive
 
 ---

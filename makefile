@@ -1,7 +1,7 @@
 # ==========================
 # 🛠️  ForgeWatch Makefile
 # --------------------------
-# Language: C99 + NASM (x86_64)
+# Language: C99
 # Purpose : Rebuild automation tool
 # ==========================
 

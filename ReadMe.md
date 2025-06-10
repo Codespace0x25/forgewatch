@@ -77,6 +77,46 @@ Now every time you save a file or add/remove something in `src/`, your build scr
 
 ---
 
+## Using the `.forgewatchrc` File
+
+You might not always want to run:
+
+```sh
+forgewatch ./src ./build.sh
+```
+
+every time. That’s why `forgewatch` supports a project-specific config file. Just run:
+
+```sh
+forgewatch init
+```
+
+in your project root.
+
+### How to Use It
+
+Running `forgewatch init` walks you through setting up your `.forgewatchrc`.
+Just answer the prompts—like which directory to watch and what build script to run.
+
+> ⚠️ Note: A Makefile alone won’t work. You’ll need a separate script (like `build.sh`) to call it.
+
+Paths are **relative**, just like if you were running the commands yourself.
+So if your build script is `build.sh`, you’d write:
+
+```sh
+./build.sh
+```
+
+Once the file is created, just run:
+
+```sh
+forgewatch
+```
+
+and it’ll load the settings from `.forgewatchrc`.
+
+---
+
 ## Why Use This?
 
 * Works with **any language or project**
@@ -108,7 +148,5 @@ sudo rm /usr/local/bin/forgewatch
 
 ## Future Features (Planned)
 
-* Recursive subdirectory watching
 * File change debouncing
 * Live output filtering (stdout only, etc.)
-* Config file support (`.forgewatchrc`) (actively being worked on)

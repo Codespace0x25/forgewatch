@@ -111,4 +111,4 @@ sudo rm /usr/local/bin/forgewatch
 * Recursive subdirectory watching
 * File change debouncing
 * Live output filtering (stdout only, etc.)
-* Config file support (`.forgewatchrc`)
+* Config file support (`.forgewatchrc`) (actively being worked on)

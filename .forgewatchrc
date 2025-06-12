@@ -1,2 +1,3 @@
 ForgWatch_path=src
 ForgWatch_build=./build.sh
+ForgWatch_Extension=.c .h

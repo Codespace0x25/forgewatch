@@ -148,5 +148,4 @@ sudo rm /usr/local/bin/forgewatch
 
 ## Future Features (Planned)
 
-* File change debouncing - (in progres)
 * Live output filtering (stdout only, etc.)

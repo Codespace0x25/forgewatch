@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 
-make
+make 
 
-echo "this works"
+./build/forgewatch 

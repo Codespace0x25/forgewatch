@@ -148,4 +148,3 @@ sudo rm /usr/local/bin/forgewatch
 
 ## Future Features (Planned)
 
-* Live output filtering (stdout only, etc.)

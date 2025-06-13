@@ -17,10 +17,15 @@
 #define EVENT_SIZE (sizeof(struct inotify_event))
 #define BUF_LEN (1024 * (EVENT_SIZE + 16))
 #define MAX_WATCHES 1024
-#define DEBOUNCE_MS 500
+#define DEBOUNCE_MS 1000
 
+#ifdef NO_FANSCY_ERROR
+#define error_printf(fmt, ...)                                                 \
+  fprintf(stderr, "[ ERROR ] " fmt "\n", ##__VA_ARGS__)
+#else
 #define error_printf(fmt, ...)                                                 \
   fprintf(stderr, "\033[1;41;97m[ ERROR ]\033[0m " fmt "\n", ##__VA_ARGS__)
+#endif
 
 #ifdef DEBUG
 #define debug_printf(fmt, ...)                                                 \
@@ -249,6 +254,12 @@ int main(int argc, char **argv) {
   signal(SIGINT, cleanup);
   signal(SIGTERM, cleanup);
 
+  if (getenv("FORGEWATCH_IS") && strcmp(getenv("FORGEWATCH_IS"), "1") == 0) {
+    error_printf("Refused to start: already running inside ForgeWatch.");
+    exit(1);
+  }
+
+
   if (argc >= 2 && strcmp(argv[1], "init") == 0) {
     create_config_interactive();
   }
@@ -285,6 +296,7 @@ int main(int argc, char **argv) {
   }
 
   watch_all_subdirs(watch_dir);
+  setenv("FORGEWATCH_IS", "1", 1);
   run_build();
 
   char buffer[BUF_LEN];

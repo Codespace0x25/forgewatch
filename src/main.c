@@ -16,26 +16,26 @@
 
 #define EVENT_SIZE (sizeof(struct inotify_event))
 #define BUF_LEN (1024 * (EVENT_SIZE + 16))
-#define MAX_WATCHES 1024
+#define MAX_WATCHES 1024 * 20
+#define MAX_WATCH_DIRS 32
 #define DEBOUNCE_MS 1000
 
 #ifdef NO_FANSCY_ERROR
-#define error_printf(fmt, ...)                                                 \
-  fprintf(stderr, "[ ERROR ] " fmt "\n", ##__VA_ARGS__)
+#define error_printf(fmt, ...) fprintf(stderr, "[ ERROR ] " fmt "\n", ##__VA_ARGS__)
 #else
-#define error_printf(fmt, ...)                                                 \
-  fprintf(stderr, "\033[1;41;97m[ ERROR ]\033[0m " fmt "\n", ##__VA_ARGS__)
+#define error_printf(fmt, ...) fprintf(stderr, "\033[1;41;97m[ ERROR ]\033[0m " fmt "\n", ##__VA_ARGS__)
 #endif
 
 #ifdef DEBUG
-#define debug_printf(fmt, ...)                                                 \
-  fprintf(stderr, "[DEBUG] " fmt "\n", ##__VA_ARGS__)
+#define debug_printf(fmt, ...) fprintf(stderr, "[DEBUG] " fmt "\n", ##__VA_ARGS__)
 #else
 #define debug_printf(fmt, ...) (void)0
 #endif
 
 pid_t current_pid = -1;
-char *watch_dir = NULL;
+char *watch_dirs[MAX_WATCH_DIRS];
+int watch_dir_count = 0;
+
 char *build_cmd = NULL;
 char *watch_exts = NULL;
 
@@ -80,13 +80,11 @@ void run_build() {
   }
 }
 
-int add_watch_cb(const char *path, const struct stat *sb, int typeflag,
-                 struct FTW *ftwbuf) {
+int add_watch_cb(const char *path, const struct stat *sb, int typeflag, struct FTW *ftwbuf) {
   if (typeflag == FTW_D) {
-    int wd =
-        inotify_add_watch(inotify_fd, path, IN_MODIFY | IN_CREATE | IN_DELETE);
+    int wd = inotify_add_watch(inotify_fd, path, IN_MODIFY | IN_CREATE | IN_DELETE);
     if (wd < 0) {
-      error_printf("inotify_add_watch failed");
+      error_printf("inotify_add_watch failed for %s", path);
     } else {
       if (watch_fd_count < MAX_WATCHES) {
         watch_fds[watch_fd_count++] = wd;
@@ -101,21 +99,14 @@ int add_watch_cb(const char *path, const struct stat *sb, int typeflag,
 
 void watch_all_subdirs(const char *path) {
   if (nftw(path, add_watch_cb, 32, FTW_PHYS) < 0) {
-    error_printf("nftw failed");
+    error_printf("nftw failed on path: %s", path);
   }
 }
 
 bool is_temporary_file(const char *filename) {
-  if (!filename || filename[0] == '\0')
-    return true;
+  if (!filename || filename[0] == '\0') return true;
+  if (filename[0] == '.' || strncmp(filename, ".#", 2) == 0) return true;
 
-  // Ignore files starting with '.' or '.#'
-  if (filename[0] == '.')
-    return true;
-  if (strncmp(filename, ".#", 2) == 0)
-    return true;
-
-  // Ignore known temp suffixes
   const char *suffixes[] = {".swp", ".swo", ".tmp", "~", NULL};
   for (int i = 0; suffixes[i]; ++i) {
     size_t len = strlen(filename);
@@ -171,14 +162,16 @@ void load_config() {
 
     if (strncmp(line, "ForgWatch_path=", 15) == 0) {
       char *val = line + 15;
-      char *resolved = realpath(val, NULL);
-      if (resolved) {
-        if (watch_dir)
-          free(watch_dir);
-        watch_dir = resolved;
-        debug_printf("Loaded watch_dir: %s", watch_dir);
-      } else {
-        fprintf(stderr, "Failed to resolve watch_dir path '%s'\n", val);
+      char *token = strtok(val, " ");
+      while (token && watch_dir_count < MAX_WATCH_DIRS) {
+        char *resolved = realpath(token, NULL);
+        if (resolved) {
+          watch_dirs[watch_dir_count++] = resolved;
+          debug_printf("Loaded watch_dir[%d]: %s", watch_dir_count - 1, resolved);
+        } else {
+          fprintf(stderr, "Failed to resolve watch_dir path '%s'\n", token);
+        }
+        token = strtok(NULL, " ");
       }
     } else if (strncmp(line, "ForgWatch_build=", 16) == 0) {
       char *val = line + 16;
@@ -200,7 +193,7 @@ void load_config() {
 
 void create_config_interactive() {
   char path[256], cmd[256], filetype[256];
-  printf("Enter directory to watch: ");
+  printf("Enter directory(s) to watch (space-separated): ");
   if (!fgets(path, sizeof(path), stdin)) {
     fprintf(stderr, "Failed to read directory path\n");
     exit(1);
@@ -214,8 +207,7 @@ void create_config_interactive() {
   }
   cmd[strcspn(cmd, "\n")] = 0;
 
-  printf("Enter every file type you would like to watch. this is in the format "
-         "of .<extension>\n space delimited: ");
+  printf("Enter file types to watch (e.g. .c .h .txt), space-delimited: ");
   if (!fgets(filetype, sizeof(filetype), stdin)) {
     fprintf(stderr, "unable to read the entry\n");
     exit(1);
@@ -243,7 +235,9 @@ void cleanup(int sig) {
     inotify_rm_watch(inotify_fd, watch_fds[i]);
   }
   close(inotify_fd);
-  free(watch_dir);
+  for (int i = 0; i < watch_dir_count; ++i) {
+    free(watch_dirs[i]);
+  }
   free(build_cmd);
   free(watch_exts);
   printf("\nExited cleanly.\n");
@@ -259,7 +253,6 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-
   if (argc >= 2 && strcmp(argv[1], "init") == 0) {
     create_config_interactive();
   }
@@ -268,25 +261,30 @@ int main(int argc, char **argv) {
     load_config();
   }
 
-  if (!watch_dir && argc >= 3) {
-    char *resolved_path = realpath(argv[1], NULL);
-    if (!resolved_path) {
-      fprintf(stderr, "Failed to resolve watch directory path '%s'\n", argv[1]);
-      return 1;
+  if (watch_dir_count == 0 && argc >= 3) {
+    char *token = strtok(argv[1], " ");
+    while (token && watch_dir_count < MAX_WATCH_DIRS) {
+      char *resolved = realpath(token, NULL);
+      if (!resolved) {
+        fprintf(stderr, "Failed to resolve watch directory path '%s'\n", token);
+        return 1;
+      }
+      watch_dirs[watch_dir_count++] = resolved;
+      token = strtok(NULL, " ");
     }
-    watch_dir = resolved_path;
     build_cmd = strdup(argv[2]);
   }
 
-  if (!watch_dir || !build_cmd) {
+  if (watch_dir_count == 0 || !build_cmd) {
     fprintf(stderr,
-            "Usage:\n  %s <watch_dir> <build_cmd>\n  %s init  # to create "
-            ".forgewatchrc\n",
+            "Usage:\n  %s \"<dir1> <dir2>\" <build_cmd>\n  %s init  # to create .forgewatchrc\n",
             argv[0], argv[0]);
     return 1;
   }
 
-  printf("Watching directory: %s\n", watch_dir);
+  printf("Watching directories:\n");
+  for (int i = 0; i < watch_dir_count; ++i)
+    printf("  - %s\n", watch_dirs[i]);
   printf("Build command: %s\n", build_cmd);
 
   inotify_fd = inotify_init();
@@ -295,7 +293,10 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  watch_all_subdirs(watch_dir);
+  for (int i = 0; i < watch_dir_count; ++i) {
+    watch_all_subdirs(watch_dirs[i]);
+  }
+
   setenv("FORGEWATCH_IS", "1", 1);
   run_build();
 
@@ -313,9 +314,11 @@ int main(int argc, char **argv) {
         debug_printf("Detected change: %s", event->name);
 
         if (event->mask & IN_CREATE && (event->mask & IN_ISDIR)) {
-          char new_path[PATH_MAX];
-          snprintf(new_path, sizeof(new_path), "%s/%s", watch_dir, event->name);
-          watch_all_subdirs(new_path);
+          for (int d = 0; d < watch_dir_count; ++d) {
+            char new_path[PATH_MAX];
+            snprintf(new_path, sizeof(new_path), "%s/%s", watch_dirs[d], event->name);
+            watch_all_subdirs(new_path);
+          }
         }
 
         if (!(event->mask & IN_ISDIR) && has_valid_extension(event->name)) {

@@ -26,7 +26,7 @@ C_OBJS   := $(patsubst $(SRC)/%.c,$(BUILD)/%.o,$(C_SOURCES))
 OBJS     := $(C_OBJS)
 
 # ==== Phony Targets ====
-.PHONY: all clean run install debug help
+.PHONY: all clean run install debug help windows
 
 # ==== Default Target ====
 all: $(TARGET)
@@ -44,6 +44,10 @@ $(TARGET): $(OBJS)
 	@echo "🔗 Linking to create binary..."
 	@$(CC) -o $@ $^ $(LDFLAGS)
 
+
+
+windows: $(SRC)/main.c
+	x86_64-w64-mingw32-gcc -o forgewatch.exe src/main.c -luser32 -lkernel32
 # ==== Run the Built Binary ====
 run: $(TARGET)
 	@echo "🚀 Running forgewatch..."
